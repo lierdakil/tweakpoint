@@ -33,6 +33,7 @@ pub struct Config {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+#[serde(default, deny_unknown_fields)]
 pub struct AxisMap {
     pub regular: HashMap<RelativeAxisCode, AxisMapDef>,
     pub scroll: HashMap<RelativeAxisCode, AxisMapDef>,
