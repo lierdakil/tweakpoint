@@ -4,7 +4,7 @@ use evdev::{
 };
 
 use crate::{
-    config::{AxisMapDef, Config},
+    config::Config,
     state::{MetaDown, State},
 };
 
@@ -126,16 +126,7 @@ impl Controller {
 
     pub fn relative(&mut self, axis: RelativeAxisCode, value: i32) -> anyhow::Result<()> {
         self.handle_pre_input()?;
-        let default_axis_map = AxisMapDef { axis, factor: 1.0 };
-        let new_axis = if self.state.scroll.active {
-            self.config
-                .axis_scroll_map
-                .get(&axis)
-                .or_else(|| self.config.axis_map.get(&axis))
-        } else {
-            self.config.axis_map.get(&axis)
-        }
-        .unwrap_or(&default_axis_map);
+        let new_axis = self.config.axis_map.get(axis, self.state.scroll.active);
         let new_value = self
             .state
             .scroll

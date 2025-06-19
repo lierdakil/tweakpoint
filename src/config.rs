@@ -27,13 +27,28 @@ pub struct Config {
     pub product_version: u16,
     #[default(BusType::BUS_USB)]
     pub bus: BusType,
-    pub axis_map: HashMap<RelativeAxisCode, AxisMapDef>,
-    pub axis_scroll_map: HashMap<RelativeAxisCode, AxisMapDef>,
+    pub axis_map: AxisMap,
     pub hi_res_enabled: bool,
     pub init: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct AxisMap {
+    pub regular: HashMap<RelativeAxisCode, AxisMapDef>,
+    pub scroll: HashMap<RelativeAxisCode, AxisMapDef>,
+}
+
+impl AxisMap {
+    pub fn get(&self, axis: RelativeAxisCode, scroll_active: bool) -> AxisMapDef {
+        *scroll_active
+            .then(|| self.scroll.get(&axis))
+            .flatten()
+            .or_else(|| self.regular.get(&axis))
+            .unwrap_or(&AxisMapDef { axis, factor: 1.0 })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct AxisMapDef {
     pub axis: RelativeAxisCode,
     #[serde(default = "default_factor")]
