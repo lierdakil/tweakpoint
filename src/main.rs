@@ -30,7 +30,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut device = Device::open(&config.device)?;
-    device.set_nonblocking(true)?;
     device.grab()?;
 
     let mut controller = Controller::new(config, &device)?;
