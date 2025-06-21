@@ -4,11 +4,11 @@ use std::{
     time::Duration,
 };
 
-use evdev::{BusType, EventType, InputEvent, KeyCode, RelativeAxisCode, uinput::VirtualDevice};
+use evdev::{BusType, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 
-use crate::state::State;
+use crate::state::ScrollState;
 
 #[derive(Serialize, Deserialize, SmartDefault)]
 #[serde(default, deny_unknown_fields)]
@@ -29,7 +29,6 @@ pub struct Config {
     pub bus: BusType,
     pub axis_map: AxisMap,
     pub hi_res_enabled: bool,
-    pub init: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -45,6 +44,9 @@ impl AxisMap {
             .then(|| self.scroll.get(&axis))
             .flatten()
             .or_else(|| self.regular.get(&axis))
+            .inspect(|new| {
+                tracing::debug!(old = ?axis, ?new, ?scroll_active, "Mapped axis");
+            })
             .unwrap_or(&AxisMapDef { axis, factor: 1.0 })
     }
 }
@@ -80,25 +82,28 @@ pub enum Action {
     Button(KeyCode),
 }
 
+#[derive(Clone, Copy, Debug)]
+#[repr(i32)]
+pub enum Direction {
+    Up = 0,
+    Down = 1,
+}
+
 impl Action {
     pub fn run(
         &self,
-        state: &mut State,
-        udev: &mut VirtualDevice,
-        down: bool,
-    ) -> anyhow::Result<()> {
+        state: &mut ScrollState,
+        dir: Direction,
+    ) -> impl IntoIterator<Item = InputEvent> + use<> {
+        tracing::debug!(btn_direction = ?dir, action = ?self, "Running action");
         match self {
             Action::ToggleScroll => {
-                state.scroll.toggle();
+                state.toggle();
+                None
             }
             Action::Button(key_code) => {
-                udev.emit(&[InputEvent::new(
-                    EventType::KEY.0,
-                    key_code.0,
-                    if down { 1 } else { 0 },
-                )])?;
+                Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32))
             }
         }
-        Ok(())
     }
 }

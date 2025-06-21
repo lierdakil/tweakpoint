@@ -1,7 +1,9 @@
-use std::{collections::HashMap, pin::Pin, task::Poll};
+use std::{collections::HashMap, pin::Pin, task::Poll, time::Duration};
 
-use evdev::RelativeAxisCode;
+use evdev::{InputEvent, RelativeAxisCode};
 use futures::FutureExt;
+
+use crate::config::{Action, Direction};
 
 #[derive(Default)]
 pub struct State {
@@ -10,7 +12,10 @@ pub struct State {
 }
 
 #[derive(Default)]
-pub enum MetaDown {
+pub struct MetaDown(MetaDownInner);
+
+#[derive(Default)]
+enum MetaDownInner {
     #[default]
     Inactive,
     Waiting(Pin<Box<tokio::time::Sleep>>),
@@ -19,12 +24,43 @@ pub enum MetaDown {
 
 impl MetaDown {
     pub fn activate_waiting(&mut self) -> bool {
-        if matches!(self, MetaDown::Waiting(_)) {
-            *self = MetaDown::Active;
+        if matches!(self.0, MetaDownInner::Waiting(_)) {
+            tracing::debug!("Force-activating waiting meta_down");
+            self.0 = MetaDownInner::Active;
             true
         } else {
             false
         }
+    }
+
+    pub fn start_wait(&mut self, timeout: Duration) {
+        tracing::debug!(?timeout, "Started meta_down timer");
+        self.0 = MetaDownInner::Waiting(Box::pin(tokio::time::sleep(timeout)));
+    }
+
+    fn reset(&mut self) {
+        tracing::debug!("Reset meta_down to inactive");
+        self.0 = MetaDownInner::Inactive;
+    }
+
+    fn is_active(&self) -> bool {
+        matches!(self.0, MetaDownInner::Active)
+    }
+
+    pub fn run(
+        &mut self,
+        state: &mut ScrollState,
+        click: &Action,
+        hold: &Action,
+    ) -> impl IntoIterator<Item = InputEvent> + use<> {
+        tracing::debug!(active = ?self.is_active(), "Running meta_down action");
+        let evt = if self.is_active() {
+            hold.run(state, Direction::Up)
+        } else {
+            click.run(state, Direction::Up)
+        };
+        self.reset();
+        evt
     }
 }
 
@@ -32,13 +68,14 @@ impl Future for &mut MetaDown {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        match &mut *self {
-            MetaDown::Waiting(pin) => {
+        match &mut self.0 {
+            MetaDownInner::Waiting(pin) => {
                 futures::ready!(pin.poll_unpin(cx));
-                **self = MetaDown::Active;
+                tracing::debug!("meta_down timeout triggered");
+                self.0 = MetaDownInner::Active;
                 Poll::Ready(())
             }
-            MetaDown::Active | MetaDown::Inactive => Poll::Pending,
+            MetaDownInner::Active | MetaDownInner::Inactive => Poll::Pending,
         }
     }
 }
@@ -52,6 +89,7 @@ pub struct ScrollState {
 impl ScrollState {
     pub fn toggle(&mut self) {
         self.active = !self.active;
+        tracing::debug!(active = ?self.active, "Scroll state toggled");
         if self.active {
             self.axes.clear();
         }
