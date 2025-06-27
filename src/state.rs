@@ -1,14 +1,92 @@
-use std::{collections::HashMap, pin::Pin, task::Poll, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    pin::Pin,
+    task::Poll,
+    time::Duration,
+};
 
-use evdev::{InputEvent, RelativeAxisCode};
+use evdev::{EventType, InputEvent, KeyCode, RelativeAxisCode};
 use futures::FutureExt;
 
-use crate::config::{Action, Direction};
+use crate::{
+    config::{Action, Direction, MetaConfig},
+    utils::EitherIter,
+};
 
 #[derive(Default)]
 pub struct State {
     pub meta_down: MetaDown,
     pub scroll: ScrollState,
+    pub lock: LockState,
+}
+
+#[derive(Default)]
+pub struct LockState {
+    btn_states: BTreeMap<KeyCode, LockStep>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum LockStep {
+    /// Button is ostensibly released both physically and logically.
+    Released,
+    /// Button is logically held but physically released
+    Locked,
+    /// Button is both logically and physically held, but will be released on
+    /// physical release.
+    WillRelease,
+}
+
+impl LockStep {
+    fn step(&mut self, value: i32) -> bool {
+        *self = match *self {
+            LockStep::Released if value == 0 => LockStep::Locked,
+            LockStep::Locked if value == 1 => LockStep::WillRelease,
+            LockStep::WillRelease if value == 0 => LockStep::Released,
+            x => x,
+        };
+        matches!(self, LockStep::Released)
+    }
+}
+
+impl LockState {
+    pub fn toggle(
+        &mut self,
+        btns: &BTreeSet<KeyCode>,
+    ) -> impl IntoIterator<Item = InputEvent> + use<> {
+        if self.btn_states.is_empty() {
+            tracing::debug!(state = "on", ?btns, "Toggle lock state");
+            self.btn_states = btns.iter().map(|x| (*x, LockStep::Released)).collect();
+            vec![]
+        } else {
+            tracing::debug!(state = "off", ?btns, "Toggle lock state");
+            // to keep sane, release locked buttons
+            let res = self
+                .btn_states
+                .iter()
+                .filter_map(|(key, step)| {
+                    if matches!(step, LockStep::Locked) {
+                        tracing::debug!(?key, "Releasing locked key");
+                        Some(InputEvent::new(EventType::KEY.0, key.0, 0))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            self.btn_states.clear();
+            res
+        }
+    }
+
+    pub fn check(&mut self, button: &KeyCode, value: i32) -> Option<KeyCode> {
+        if let Some(entry) = self.btn_states.get_mut(button) {
+            // "lock" just filters out consecutive {0, 1} sequences.
+            if !entry.step(value) {
+                tracing::debug!(?entry, ?button, "Locking button");
+                return None;
+            }
+        }
+        Some(*button)
+    }
 }
 
 #[derive(Default)]
@@ -19,17 +97,38 @@ enum MetaDownInner {
     #[default]
     Inactive,
     Waiting(Pin<Box<tokio::time::Sleep>>),
-    Active,
+    Active(ActionType),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ActionType {
+    Hold,
+    Move,
+    Chord(KeyCode),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ActionTypeExt {
+    Click,
+    Other(ActionType),
 }
 
 impl MetaDown {
-    pub fn activate_waiting(&mut self) -> bool {
+    pub fn activate_waiting(&mut self, typ: ActionType) -> bool {
         if matches!(self.0, MetaDownInner::Waiting(_)) {
-            tracing::debug!("Force-activating waiting meta_down");
-            self.0 = MetaDownInner::Active;
+            tracing::debug!(?typ, "Force-activating waiting meta_down");
+            self.0 = MetaDownInner::Active(typ);
             true
         } else {
-            false
+            match (typ, &self.0) {
+                (ActionType::Chord(k1), MetaDownInner::Active(ActionType::Chord(k2)))
+                    if &k1 == k2 =>
+                {
+                    tracing::debug!(key = ?k1, "Detected chord release event");
+                    true
+                }
+                _ => false,
+            }
         }
     }
 
@@ -43,23 +142,46 @@ impl MetaDown {
         self.0 = MetaDownInner::Inactive;
     }
 
-    fn is_active(&self) -> bool {
-        matches!(self.0, MetaDownInner::Active)
-    }
-
-    pub fn run(
-        &mut self,
-        state: &mut ScrollState,
-        click: &Action,
-        hold: &Action,
-    ) -> impl IntoIterator<Item = InputEvent> + use<> {
-        tracing::debug!(active = ?self.is_active(), "Running meta_down action");
-        let evt = if self.is_active() {
-            hold.run(state, Direction::Up)
+    fn action_type(&self) -> ActionTypeExt {
+        if let MetaDownInner::Active(typ) = &self.0 {
+            ActionTypeExt::Other(*typ)
         } else {
-            click.run(state, Direction::Up)
+            ActionTypeExt::Click
+        }
+    }
+}
+
+impl State {
+    pub fn handle_meta_up(
+        &mut self,
+        config: &MetaConfig,
+    ) -> impl IntoIterator<Item = InputEvent> + use<> {
+        tracing::debug!(action_type = ?self.meta_down.action_type(), "Running meta_up action");
+        let evt = match self.meta_down.action_type() {
+            ActionTypeExt::Click => {
+                // the only "instant" action, run down then immediately up.
+                EitherIter::right(
+                    config
+                        .click
+                        .run(self, Direction::Down, "Click on meta_up")
+                        .into_iter()
+                        .chain(config.click.run(self, Direction::Up, "Click on meta_up")),
+                )
+            }
+            ActionTypeExt::Other(ActionType::Hold) => config
+                .hold
+                .run(self, Direction::Up, "Hold on meta_up")
+                .into(),
+            ActionTypeExt::Other(ActionType::Move) => config
+                .r#move
+                .run(self, Direction::Up, "Move on meta_up")
+                .into(),
+            // chord is handled on chorded button press/release, so we nothing to do here.
+            ActionTypeExt::Other(ActionType::Chord(_)) => Action::None
+                .run(self, Direction::Up, "Chord on meta_up")
+                .into(),
         };
-        self.reset();
+        self.meta_down.reset();
         evt
     }
 }
@@ -72,10 +194,10 @@ impl Future for &mut MetaDown {
             MetaDownInner::Waiting(pin) => {
                 futures::ready!(pin.poll_unpin(cx));
                 tracing::debug!("meta_down timeout triggered");
-                self.0 = MetaDownInner::Active;
+                self.0 = MetaDownInner::Active(ActionType::Hold);
                 Poll::Ready(())
             }
-            MetaDownInner::Active | MetaDownInner::Inactive => Poll::Pending,
+            MetaDownInner::Active(_) | MetaDownInner::Inactive => Poll::Pending,
         }
     }
 }

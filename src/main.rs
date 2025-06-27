@@ -1,7 +1,7 @@
 use clap::Parser;
 use evdev::{
-    AbsoluteAxisCode, AttributeSet, Device, EventType, InputId, KeyCode, MiscCode, PropType,
-    RelativeAxisCode, SynchronizationCode, UinputAbsSetup, uinput::VirtualDevice,
+    AttributeSet, Device, EventType, InputId, KeyCode, MiscCode, PropType, RelativeAxisCode,
+    SynchronizationCode, UinputAbsSetup, uinput::VirtualDevice,
 };
 use figment::providers::Format;
 
@@ -10,6 +10,7 @@ use self::{config::*, logic::*};
 mod config;
 mod logic;
 mod state;
+mod utils;
 
 #[derive(clap::Parser)]
 struct Cli {
@@ -112,7 +113,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 EventType::KEY => controller.button(KeyCode(ev.code()), ev.value()),
                 EventType::RELATIVE => controller.relative(RelativeAxisCode(ev.code()), ev.value()),
-                EventType::ABSOLUTE => controller.absolute(AbsoluteAxisCode(ev.code()), ev.value()),
                 EventType::MISC if ev.code() == MiscCode::MSC_SCAN.0 => {
                     tracing::trace!(?ev, "Filtered out MSC_SCAN event");
                 }

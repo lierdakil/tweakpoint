@@ -1,8 +1,8 @@
-use evdev::{AbsoluteAxisCode, EventType, InputEvent, KeyCode, RelativeAxisCode};
+use evdev::{EventType, InputEvent, KeyCode, RelativeAxisCode};
 
 use crate::{
     config::{Config, Direction},
-    state::State,
+    state::{ActionType, State},
 };
 
 pub struct Controller {
@@ -31,39 +31,54 @@ impl Controller {
         }
     }
 
-    pub fn meta_down(&mut self) {
-        self.state.meta_down.start_wait(self.config.meta.hold_time);
-    }
-
-    pub fn meta_up(&mut self) {
-        let evt = self.state.meta_down.run(
-            &mut self.state.scroll,
-            &self.config.meta.click,
-            &self.config.meta.hold,
-        );
-        self.send_events(evt);
-    }
-
-    fn handle_pre_input(&mut self) {
-        if self.state.meta_down.activate_waiting() {
-            let evts = self
-                .config
-                .meta
-                .hold
-                .run(&mut self.state.scroll, Direction::Down);
-            self.send_events(evts);
-        }
-    }
-
     pub fn button(&mut self, key_code: KeyCode, value: i32) {
         if key_code == self.config.meta.key {
             match value {
-                1 => return self.meta_down(),
-                0 => return self.meta_up(),
+                1 => {
+                    // meta key down
+                    let this = &mut *self;
+                    this.state.meta_down.start_wait(this.config.meta.hold_time);
+                }
+                0 => {
+                    // meta key up
+                    let this = &mut *self;
+                    let evt = this.state.handle_meta_up(&this.config.meta);
+                    this.send_events(evt);
+                }
+                // meta key ???
                 _ => {}
             }
+            // don't pass go, don't pass through meta key.
+            return;
         }
-        self.handle_pre_input();
+        if self
+            .state
+            .meta_down
+            .activate_waiting(ActionType::Chord(key_code))
+        {
+            if let Some(action) = self.config.meta.chord.get(&key_code) {
+                tracing::debug!(key = ?key_code, "Activated chord");
+                let evts = action.run(
+                    &mut self.state,
+                    if matches!(value, 1) {
+                        Direction::Down
+                    } else {
+                        Direction::Up
+                    },
+                    "Chord activated",
+                );
+                self.send_events(evts);
+                // don't pass go, don't emit the chorded button.
+                return;
+            } else {
+                let evts = self.config.meta.hold.run(
+                    &mut self.state,
+                    Direction::Down,
+                    "Hold activated on other button",
+                );
+                self.send_events(evts);
+            }
+        }
         let new_key_code = self
             .config
             .btn_map
@@ -72,11 +87,21 @@ impl Controller {
                 tracing::debug!(orig = ?key_code, ?new, "Mapped key press");
             })
             .unwrap_or(&key_code);
-        self.send_events([InputEvent::new(EventType::KEY.0, new_key_code.0, value)]);
+        if let Some(new_key_code) = self.state.lock.check(new_key_code, value) {
+            self.send_events([InputEvent::new(EventType::KEY.0, new_key_code.0, value)]);
+        }
     }
 
     pub fn relative(&mut self, axis: RelativeAxisCode, value: i32) {
-        self.handle_pre_input();
+        if self.state.meta_down.activate_waiting(ActionType::Move) {
+            let evts =
+                self.config
+                    .meta
+                    .r#move
+                    .run(&mut self.state, Direction::Down, "Move activated");
+            self.send_events(evts);
+        }
+
         let new_axis = self.config.axis_map.get(axis, self.state.scroll.active);
         let new_value = self
             .state
@@ -89,16 +114,11 @@ impl Controller {
         )]);
     }
 
-    pub fn absolute(&mut self, axis: AbsoluteAxisCode, value: i32) {
-        self.handle_pre_input();
-        self.send_events([InputEvent::new(EventType::ABSOLUTE.0, axis.0, value)]);
-    }
-
     pub async fn next_events(&mut self, buf: &mut Vec<InputEvent>) -> usize {
         loop {
             tokio::select! {
               _ = &mut self.state.meta_down => {
-                  let evts = self.config.meta.hold.run(&mut self.state.scroll, Direction::Down);
+                  let evts = self.config.meta.hold.run(&mut self.state, Direction::Down, "Hold fired");
                   self.send_events(evts);
               },
               n = self.synthetic_rx.recv_many(buf, usize::MAX) => {

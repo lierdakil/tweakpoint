@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     path::PathBuf,
     time::Duration,
 };
@@ -8,7 +8,7 @@ use evdev::{BusType, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 
-use crate::state::ScrollState;
+use crate::{state::State, utils::EitherIter};
 
 #[derive(Serialize, Deserialize, SmartDefault)]
 #[serde(default, deny_unknown_fields)]
@@ -45,7 +45,7 @@ impl AxisMap {
             .flatten()
             .or_else(|| self.regular.get(&axis))
             .inspect(|new| {
-                tracing::debug!(old = ?axis, ?new, ?scroll_active, "Mapped axis");
+                tracing::trace!(old = ?axis, ?new, ?scroll_active, "Mapped axis");
             })
             .unwrap_or(&AxisMapDef { axis, factor: 1.0 })
     }
@@ -69,6 +69,10 @@ pub struct MetaConfig {
     pub key: KeyCode,
     #[default(Action::Button(KeyCode::BTN_TASK))]
     pub hold: Action,
+    #[default(Action::Button(KeyCode::BTN_TASK))]
+    pub r#move: Action,
+    #[default([].into())]
+    pub chord: BTreeMap<KeyCode, Action>,
     #[default(Duration::from_millis(250))]
     #[serde(with = "humantime_serde")]
     pub hold_time: Duration,
@@ -78,7 +82,9 @@ pub struct MetaConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Action {
+    None,
     ToggleScroll,
+    ToggleLock(BTreeSet<KeyCode>),
     Button(KeyCode),
 }
 
@@ -92,18 +98,26 @@ pub enum Direction {
 impl Action {
     pub fn run(
         &self,
-        state: &mut ScrollState,
+        state: &mut State,
         dir: Direction,
+        ctx: &str,
     ) -> impl IntoIterator<Item = InputEvent> + use<> {
-        tracing::debug!(btn_direction = ?dir, action = ?self, "Running action");
+        tracing::debug!(btn_direction = ?dir, action = ?self, %ctx, "Running action");
         match self {
-            Action::ToggleScroll => {
-                state.toggle();
-                None
+            Action::ToggleScroll if matches!(dir, Direction::Down) => {
+                tracing::debug!("ToggleScroll action executing");
+                state.scroll.toggle();
+                None.into()
             }
             Action::Button(key_code) => {
-                Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32))
+                tracing::debug!(?key_code, "Button action executing");
+                Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32)).into()
             }
+            Action::ToggleLock(lock_btns) if matches!(dir, Direction::Down) => {
+                tracing::debug!(?lock_btns, "ToggleLock action executing");
+                EitherIter::right(state.lock.toggle(lock_btns))
+            }
+            _ => None.into(),
         }
     }
 }
