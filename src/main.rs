@@ -80,7 +80,28 @@ async fn main() -> anyhow::Result<()> {
 
     let mut udev_stream = dev.into_event_stream()?;
 
+    let socket = if let Some(path) = &config.socket_path {
+        if let Ok(true) = tokio::fs::try_exists(path).await {
+            tokio::fs::remove_file(path).await?;
+        }
+        Some(tokio::net::UnixListener::bind(path)?)
+    } else {
+        None
+    };
+
     let mut controller = Controller::new(config);
+
+    let state_vec_tx = if let Some(socket) = socket {
+        let (state_vec_tx, state_vec_rx) = {
+            let mut state = vec![];
+            controller.state_vec(&mut state);
+            tokio::sync::watch::channel(state)
+        };
+        tokio::spawn(handle_socket(socket, state_vec_rx));
+        Some(state_vec_tx)
+    } else {
+        None
+    };
 
     let mut stream = device.into_event_stream()?;
     let mut buf = vec![];
@@ -118,8 +139,39 @@ async fn main() -> anyhow::Result<()> {
                 }
                 _ => controller.passthrough(ev),
             }
+            if let Some(state_vec_tx) = &state_vec_tx {
+                state_vec_tx.send_modify(|x| {
+                    x.clear();
+                    controller.state_vec(x);
+                });
+            }
             ev = stream.next_event().await?;
             tracing::trace!(?ev, "Event physical -> virtual");
         }
+    }
+}
+
+async fn handle_socket(
+    socket: tokio::net::UnixListener,
+    state_vec_rx: tokio::sync::watch::Receiver<Vec<u8>>,
+) {
+    loop {
+        let Ok((mut conn, _)) = socket.accept().await else {
+            tracing::error!("Failed to accept socket connection; bailing, socket is disabled");
+            break;
+        };
+        let mut state_vec_rx = state_vec_rx.clone();
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            loop {
+                let data = state_vec_rx.borrow_and_update().clone();
+                if conn.write_all(&data).await.is_err() {
+                    break;
+                }
+                if state_vec_rx.changed().await.is_err() {
+                    break;
+                };
+            }
+        });
     }
 }

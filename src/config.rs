@@ -13,6 +13,7 @@ use crate::{state::State, utils::EitherIter};
 #[derive(Serialize, Deserialize, SmartDefault)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub socket_path: Option<PathBuf>,
     #[default("/dev/input/event0")]
     pub device: PathBuf,
     pub btn_map: BTreeMap<KeyCode, KeyCode>,

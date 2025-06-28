@@ -24,14 +24,15 @@ pub struct LockState {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum LockStep {
+#[repr(u8)]
+pub enum LockStep {
     /// Button is ostensibly released both physically and logically.
-    Released,
+    Released = 0,
     /// Button is logically held but physically released
-    Locked,
+    Locked = 1,
     /// Button is both logically and physically held, but will be released on
     /// physical release.
-    WillRelease,
+    WillRelease = 2,
 }
 
 impl LockStep {
@@ -47,6 +48,10 @@ impl LockStep {
 }
 
 impl LockState {
+    pub fn state_vec(&self) -> impl Iterator<Item = (KeyCode, LockStep)> {
+        self.btn_states.iter().map(|(k, v)| (*k, *v))
+    }
+
     pub fn toggle(
         &mut self,
         btns: &BTreeSet<KeyCode>,

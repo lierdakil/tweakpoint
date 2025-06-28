@@ -23,6 +23,19 @@ impl Controller {
         }
     }
 
+    pub fn state_vec(&self, out: &mut Vec<u8>) {
+        let scroll_active = self.state.scroll.active;
+        out.extend_from_slice(&[0x00; 4]);
+        let pos = out.len();
+        out.push(if scroll_active { 0x01 } else { 0x00 });
+        for (lock_btn, lock_step) in self.state.lock.state_vec() {
+            out.extend_from_slice(&lock_btn.0.to_le_bytes());
+            out.push(lock_step as u8);
+        }
+        let len = (out.len() - pos) as u32;
+        out[pos - 4..pos].copy_from_slice(&len.to_le_bytes());
+    }
+
     fn send_events(&self, it: impl IntoIterator<Item = InputEvent>) {
         for evt in it {
             self.synthetic_tx
