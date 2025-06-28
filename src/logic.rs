@@ -117,7 +117,7 @@ impl Controller {
     pub async fn next_events(&mut self, buf: &mut Vec<InputEvent>) -> usize {
         loop {
             tokio::select! {
-              _ = &mut self.state.meta_down => {
+              _ = self.state.meta_down.wait() => {
                   let evts = self.config.meta.hold.run(&mut self.state, Direction::Down, "Hold fired");
                   self.send_events(evts);
               },

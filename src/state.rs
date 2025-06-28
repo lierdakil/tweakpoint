@@ -1,12 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     pin::Pin,
-    task::Poll,
     time::Duration,
 };
 
 use evdev::{EventType, InputEvent, KeyCode, RelativeAxisCode};
-use futures::FutureExt;
 
 use crate::{
     config::{Action, Direction, MetaConfig},
@@ -90,7 +88,9 @@ impl LockState {
 }
 
 #[derive(Default)]
-pub struct MetaDown(MetaDownInner);
+pub struct MetaDown {
+    inner: MetaDownInner,
+}
 
 #[derive(Default)]
 enum MetaDownInner {
@@ -115,12 +115,12 @@ pub enum ActionTypeExt {
 
 impl MetaDown {
     pub fn activate_waiting(&mut self, typ: ActionType) -> bool {
-        if matches!(self.0, MetaDownInner::Waiting(_)) {
+        if matches!(self.inner, MetaDownInner::Waiting(_)) {
             tracing::debug!(?typ, "Force-activating waiting meta_down");
-            self.0 = MetaDownInner::Active(typ);
+            self.inner = MetaDownInner::Active(typ);
             true
         } else {
-            match (typ, &self.0) {
+            match (typ, &self.inner) {
                 (ActionType::Chord(k1), MetaDownInner::Active(ActionType::Chord(k2)))
                     if &k1 == k2 =>
                 {
@@ -134,19 +134,34 @@ impl MetaDown {
 
     pub fn start_wait(&mut self, timeout: Duration) {
         tracing::debug!(?timeout, "Started meta_down timer");
-        self.0 = MetaDownInner::Waiting(Box::pin(tokio::time::sleep(timeout)));
+        self.inner = MetaDownInner::Waiting(Box::pin(tokio::time::sleep(timeout)));
     }
 
     fn reset(&mut self) {
         tracing::debug!("Reset meta_down to inactive");
-        self.0 = MetaDownInner::Inactive;
+        self.inner = MetaDownInner::Inactive;
     }
 
     fn action_type(&self) -> ActionTypeExt {
-        if let MetaDownInner::Active(typ) = &self.0 {
+        if let MetaDownInner::Active(typ) = &self.inner {
             ActionTypeExt::Other(*typ)
         } else {
             ActionTypeExt::Click
+        }
+    }
+
+    pub async fn wait(&mut self) {
+        // we hold a mut reference, mening nobody else does. Ergo, it can't
+        // change from under us, ergo we can return pending() in the
+        // else-branch: the future would have to be canned before inner can
+        // change.
+        match &mut self.inner {
+            MetaDownInner::Waiting(pin) => {
+                pin.await;
+                tracing::debug!("meta_down timeout triggered");
+                self.inner = MetaDownInner::Active(ActionType::Hold);
+            }
+            MetaDownInner::Active(_) | MetaDownInner::Inactive => std::future::pending().await,
         }
     }
 }
@@ -183,22 +198,6 @@ impl State {
         };
         self.meta_down.reset();
         evt
-    }
-}
-
-impl Future for &mut MetaDown {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        match &mut self.0 {
-            MetaDownInner::Waiting(pin) => {
-                futures::ready!(pin.poll_unpin(cx));
-                tracing::debug!("meta_down timeout triggered");
-                self.0 = MetaDownInner::Active(ActionType::Hold);
-                Poll::Ready(())
-            }
-            MetaDownInner::Active(_) | MetaDownInner::Inactive => Poll::Pending,
-        }
     }
 }
 
