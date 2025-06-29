@@ -8,8 +8,30 @@
       flake-utils,
       ...
     }:
+    let
+      mkPackage =
+        pkgs:
+        let
+          manifest = (pkgs.lib.importTOML ./Cargo.toml).package;
+        in
+        pkgs.rustPlatform.buildRustPackage {
+          pname = manifest.name;
+          version = manifest.version;
+          src = pkgs.lib.cleanSource (
+            pkgs.lib.sources.sourceFilesBySuffices ./. [
+              "Cargo.lock"
+              "Cargo.toml"
+              ".rs"
+            ]
+          );
+          cargoLock.lockFile = ./Cargo.lock;
+        };
+    in
     {
       homeManagerModules.default = import ./nix/module.nix self;
+      overlays.default = prev: final: {
+        tweakpoint = mkPackage final;
+      };
     }
     //
       flake-utils.lib.eachSystem
@@ -18,13 +40,10 @@
           system:
           let
             pkgs = nixpkgs.legacyPackages.${system};
-            manifest = (pkgs.lib.importTOML ./Cargo.toml).package;
           in
-          with pkgs;
           {
-            inherit pkgs;
-            devShells.default = mkShell {
-              buildInputs = [
+            devShells.default = pkgs.mkShell {
+              buildInputs = with pkgs; [
                 rustc
                 cargo
                 clippy
@@ -32,20 +51,14 @@
                 rustfmt
               ];
               # Environment variables
-              RUST_SRC_PATH = rustPlatform.rustLibSrc;
+              RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
             };
-            packages.default = rustPlatform.buildRustPackage {
-              pname = manifest.name;
-              version = manifest.version;
-              src = lib.cleanSource (
-                lib.sources.sourceFilesBySuffices ./. [
-                  "Cargo.lock"
-                  "Cargo.toml"
-                  ".rs"
-                ]
-              );
-              cargoLock.lockFile = ./Cargo.lock;
-            };
+            packages.default = mkPackage pkgs;
+            packages.static =
+              (import nixpkgs {
+                inherit system;
+                overlays = [ self.overlays.default ];
+              }).pkgsStatic.tweakpoint;
             packages.doc =
               let
                 eval = pkgs.lib.evalModules {

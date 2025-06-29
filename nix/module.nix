@@ -8,9 +8,12 @@ self:
 let
   conf = config.services.tweakpoint;
   mkOption = lib.mkOption;
-  key_code = with lib.types; enum (import ./key_codes.nix) // {
-    description = "Evdev key code name, e.g. \"BTN_LEFT\" or \"KEY_A\"";
-  };
+  key_code =
+    with lib.types;
+    enum (import ./key_codes.nix)
+    // {
+      description = "Evdev key code name, e.g. \"BTN_LEFT\" or \"KEY_A\"";
+    };
   axis_code = with lib.types; enum (import ./axis_codes.nix);
   bus_type = with lib.types; enum (import ./bus_types.nix);
   action =
@@ -29,7 +32,8 @@ let
       lock = mkOptionType {
         name = "lock";
         description = "{ ToggleLock = [ key_code ] }";
-        check = x: lib.length (lib.attrNames x) == 1 && x ? ToggleLock && (listOf key_code).check x.ToggleLock;
+        check =
+          x: lib.length (lib.attrNames x) == 1 && x ? ToggleLock && (listOf key_code).check x.ToggleLock;
         merge = lib.options.mergeEqualOption;
       };
     in
