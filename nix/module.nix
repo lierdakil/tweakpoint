@@ -241,29 +241,33 @@ in
       };
     };
   };
-  config = # lib.mkIf conf.enable
-    {
-      systemd.user.services.tweakpoint = {
-        Install.WantedBy = [ "default.target" ];
-        Service =
-          {
-            Environment = "PATH=${
-              lib.makeSearchPath "bin" (
-                [
-                  pkgs.bash
-                  pkgs.coreutils
-                ]
-                ++ conf.extraPkgs
-              )
-            }";
-            ExecStart = "${
-              lib.getExe' self.packages.${pkgs.system}.default "tweakpoint"
-            } --config ${config_toml}";
-            Restart = "always";
-          }
-          // lib.mkIf (conf.postScript != null) {
-            ExecStartPost = pkgs.writeScript "tweakpoint-post-start.sh" conf.postScript;
-          };
-      };
+  config = lib.mkIf conf.enable {
+    systemd.user.services.tweakpoint = {
+      Install.WantedBy = [ "default.target" ];
+      Service =
+        {
+          Environment = "PATH=${
+            lib.makeSearchPath "bin" (
+              [
+                pkgs.bash
+                pkgs.coreutils
+              ]
+              ++ conf.extraPkgs
+            )
+          }";
+          ExecStart = "${
+            lib.getExe' self.packages.${pkgs.system}.default "tweakpoint"
+          } --config ${config_toml}";
+          Restart = "always";
+        }
+        // (
+          if (conf.postScript != null) then
+            {
+              ExecStartPost = pkgs.writeScript "tweakpoint-post-start.sh" conf.postScript;
+            }
+          else
+            { }
+        );
     };
+  };
 }
