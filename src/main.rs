@@ -119,14 +119,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(switch) = device.supported_switches() {
         dev = dev.with_switches(switch)?;
     }
-    let mut dev = dev.build()?;
-
-    while !tokio::fs::try_exists(dev.get_syspath()?).await? {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await
-    }
-
-    let notify = SdNotify::new()?;
-    notify.ready().await?;
+    let dev = dev.build()?;
 
     tracing::debug!(?dev, "Created virtual device");
 
@@ -159,6 +152,10 @@ async fn main() -> anyhow::Result<()> {
     let mut buf = vec![];
 
     tracing::debug!("Starting main loop");
+
+    let notify = SdNotify::new()?;
+    notify.ready().await?;
+
     loop {
         let mut ev = tokio::select! {
             biased;
