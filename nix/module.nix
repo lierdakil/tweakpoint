@@ -255,6 +255,7 @@ in
               ++ conf.extraPkgs
             )
           }";
+          Type = "notify";
           ExecStart = "${
             lib.getExe' self.packages.${pkgs.system}.default "tweakpoint"
           } --config ${config_toml}";

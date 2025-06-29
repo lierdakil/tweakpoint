@@ -7,10 +7,11 @@ use evdev::{
 };
 use figment::providers::Format;
 
-use self::{config::*, logic::*};
+use self::{config::*, logic::*, notify::SdNotify};
 
 mod config;
 mod logic;
+mod notify;
 mod state;
 mod utils;
 
@@ -118,7 +119,14 @@ async fn main() -> anyhow::Result<()> {
     if let Some(switch) = device.supported_switches() {
         dev = dev.with_switches(switch)?;
     }
-    let dev = dev.build()?;
+    let mut dev = dev.build()?;
+
+    while !tokio::fs::try_exists(dev.get_syspath()?).await? {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await
+    }
+
+    let notify = SdNotify::new()?;
+    notify.ready().await?;
 
     tracing::debug!(?dev, "Created virtual device");
 
