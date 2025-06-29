@@ -206,20 +206,23 @@ async fn handle_socket(
     use std::time::Instant;
     let mut limit = (Instant::now(), 0u8);
     loop {
-        let Ok((mut conn, _)) = socket.accept().await else {
-            tracing::error!("Failed to accept socket connection");
-            if limit.1 > 10 && limit.0.elapsed().as_secs_f32() < 5.0 {
-                tracing::error!(
-                    "Socket connections failing too often; bailing, socket is disabled"
-                );
-                break;
-            } else if limit.1 == 0 || limit.0.elapsed().as_secs_f32() >= 5.0 {
-                limit = (Instant::now(), 1);
-            } else {
-                // limit <= 10 elapsed < 5.0
-                limit.1 = limit.1.saturating_add(1);
+        let mut conn = match socket.accept().await {
+            Ok((conn, _)) => conn,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to accept socket connection");
+                if limit.1 > 10 && limit.0.elapsed().as_secs_f32() < 5.0 {
+                    tracing::error!(
+                        "Socket connections failing too often; bailing, socket is disabled"
+                    );
+                    break;
+                } else if limit.1 == 0 || limit.0.elapsed().as_secs_f32() >= 5.0 {
+                    limit = (Instant::now(), 1);
+                } else {
+                    // limit <= 10 elapsed < 5.0
+                    limit.1 = limit.1.saturating_add(1);
+                }
+                continue;
             }
-            continue;
         };
         let mut state_vec_rx = state_vec_rx.clone();
         tokio::spawn(async move {
