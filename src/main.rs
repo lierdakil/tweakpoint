@@ -226,15 +226,36 @@ async fn handle_socket(
         };
         let mut state_vec_rx = state_vec_rx.clone();
         tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
             use tokio::io::AsyncWriteExt;
-            loop {
-                let data = state_vec_rx.borrow_and_update().clone();
-                if conn.write_all(&data).await.is_err() {
-                    break;
+            let (mut rx, mut tx) = conn.split();
+            let writer = async {
+                loop {
+                    let data = state_vec_rx.borrow_and_update().clone();
+                    if tx.write_all(&data).await.is_err() {
+                        break;
+                    }
+                    if state_vec_rx.changed().await.is_err() {
+                        break;
+                    };
                 }
-                if state_vec_rx.changed().await.is_err() {
-                    break;
-                };
+            };
+            let reader = async {
+                loop {
+                    let mut buf = [0; 1024];
+                    match rx.read(&mut buf).await {
+                        Ok(0) => break, // client disconnect
+                        Ok(_) => {}     // ignore
+                        Err(e) => {
+                            tracing::error!(error = %e, "Error reading from the socket");
+                            break;
+                        }
+                    }
+                }
+            };
+            tokio::select! {
+                _ = reader => {}
+                _ = writer => {}
             }
         });
     }
