@@ -262,7 +262,7 @@ in
             Restart = "always";
           }
           // lib.mkIf (conf.postScript != null) {
-            ExecStartPost = conf.postScript;
+            ExecStartPost = pkgs.writeScript "tweakpoint-post-start.sh" conf.postScript;
           };
       };
     };
