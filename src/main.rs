@@ -153,8 +153,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::debug!("Starting main loop");
 
-    let notify = SdNotify::new()?;
-    notify.ready().await?;
+    SdNotify::new()?.ready().await?;
 
     loop {
         let mut ev = tokio::select! {
