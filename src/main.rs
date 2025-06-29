@@ -1,7 +1,9 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 use evdev::{
-    AttributeSet, Device, EventType, InputId, KeyCode, MiscCode, PropType, RelativeAxisCode,
-    SynchronizationCode, UinputAbsSetup, uinput::VirtualDevice,
+    AttributeSet, BusType, Device, EventType, InputId, KeyCode, MiscCode, PropType,
+    RelativeAxisCode, SynchronizationCode, UinputAbsSetup, uinput::VirtualDevice,
 };
 use figment::providers::Format;
 
@@ -14,10 +16,21 @@ mod utils;
 
 #[derive(clap::Parser)]
 struct Cli {
+    /// Path to the config file.
     #[arg(long, short, default_value = "tweakpoint.toml")]
-    config: String,
+    config: PathBuf,
+    /// Dump the active config and exit.
     #[arg(long)]
     dump_config: bool,
+    #[arg(long)]
+    /// List known key codes and exit.
+    list_keys: bool,
+    /// List known relative axis codes and exit.
+    #[arg(long)]
+    list_relative_axes: bool,
+    /// List known bus types and exit
+    #[arg(long)]
+    list_bus_types: bool,
 }
 
 #[tokio::main]
@@ -32,6 +45,37 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    if cli.list_keys {
+        for i in 0..u16::MAX {
+            let fmt = format!("{:?}", KeyCode(i));
+            if !fmt.starts_with("unknown key:") {
+                println!("{fmt}");
+            }
+        }
+    }
+
+    if cli.list_relative_axes {
+        for i in 0..u16::MAX {
+            let fmt = format!("{:?}", RelativeAxisCode(i));
+            if !fmt.starts_with("unknown key:") {
+                println!("{fmt}");
+            }
+        }
+    }
+
+    if cli.list_bus_types {
+        for i in 0..u16::MAX {
+            let fmt = format!("{:?}", BusType(i));
+            if !fmt.starts_with("unknown key:") {
+                println!("{fmt}");
+            }
+        }
+    }
+
+    if cli.list_relative_axes || cli.list_keys || cli.list_bus_types {
+        return Ok(());
+    }
 
     let config: Config = figment::Figment::new()
         .join(figment::providers::Toml::file(&cli.config))
@@ -161,11 +205,14 @@ async fn handle_socket(
         let Ok((mut conn, _)) = socket.accept().await else {
             tracing::error!("Failed to accept socket connection");
             if limit.1 > 10 && limit.0.elapsed().as_secs_f32() < 5.0 {
-                tracing::error!("Socket connections failing too often; bailing, socket is disabled");
+                tracing::error!(
+                    "Socket connections failing too often; bailing, socket is disabled"
+                );
                 break;
             } else if limit.1 == 0 || limit.0.elapsed().as_secs_f32() >= 5.0 {
                 limit = (Instant::now(), 1);
-            } else { // limit <= 10 elapsed < 5.0
+            } else {
+                // limit <= 10 elapsed < 5.0
                 limit.1 = limit.1.saturating_add(1);
             }
             continue;

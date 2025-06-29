@@ -1,35 +1,108 @@
 {
   description = "Tweakpoint -- a small daemon tweaking pointer device behaviour";
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachSystem [flake-utils.lib.system.x86_64-linux flake-utils.lib.system.aarch64-linux] (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-        manifest = (pkgs.lib.importTOML ./Cargo.toml).package;
-      in
-      with pkgs;
-      {
-        inherit pkgs;
-        devShells.default = mkShell {
-          buildInputs = [
-            rustc
-            cargo
-            clippy
-            rust-analyzer
-            rustfmt
-          ];
-          # Environment variables
-          RUST_SRC_PATH = rustPlatform.rustLibSrc;
-        };
-        packages.default = rustPlatform.buildRustPackage {
-          pname = manifest.name;
-          version = manifest.version;
-          src = lib.cleanSource ./.;
-          cargoLock.lockFile = ./Cargo.lock;
-        };
-        apps.default = flake-utils.lib.mkApp {
-          drv = self.packages.${system}.default;
-        };
-      }
-    );
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
+    {
+      homeManagerModules.default = import ./nix/module.nix self;
+    }
+    //
+      flake-utils.lib.eachSystem
+        [ flake-utils.lib.system.x86_64-linux flake-utils.lib.system.aarch64-linux ]
+        (
+          system:
+          let
+            pkgs = nixpkgs.legacyPackages.${system};
+            manifest = (pkgs.lib.importTOML ./Cargo.toml).package;
+          in
+          with pkgs;
+          {
+            inherit pkgs;
+            devShells.default = mkShell {
+              buildInputs = [
+                rustc
+                cargo
+                clippy
+                rust-analyzer
+                rustfmt
+              ];
+              # Environment variables
+              RUST_SRC_PATH = rustPlatform.rustLibSrc;
+            };
+            packages.default = rustPlatform.buildRustPackage {
+              pname = manifest.name;
+              version = manifest.version;
+              src = lib.cleanSource (
+                lib.sources.sourceFilesBySuffices ./. [
+                  "Cargo.lock"
+                  "Cargo.toml"
+                  ".rs"
+                ]
+              );
+              cargoLock.lockFile = ./Cargo.lock;
+            };
+            packages.doc =
+              let
+                eval = pkgs.lib.evalModules {
+                  modules = [
+                    {
+                      options._module.args = pkgs.lib.mkOption { internal = true; };
+                      config._module.args = { inherit pkgs; };
+                      config._module.check = false;
+                    }
+                    self.homeManagerModules.default
+                  ];
+                };
+              in
+              (pkgs.nixosOptionsDoc { inherit (eval) options; }).optionsCommonMark;
+            apps.default = flake-utils.lib.mkApp {
+              drv = self.packages.${system}.default;
+            };
+            checks.config =
+              let
+                eval = pkgs.lib.evalModules {
+                  modules = [
+                    {
+                      options._module.args = pkgs.lib.mkOption { internal = true; };
+                      config._module.args = { inherit pkgs; };
+                      config._module.check = false;
+                      config.services.tweakpoint = {
+                        enable = true;
+                        settings = {
+                          device = "/dev/input/by-id/usb-Foo-Bar";
+                          meta.key = "BTN_SIDE";
+                          btn_map = {
+                            BTN_LEFT = "BTN_RIGHT";
+                            BTN_RIGHT = "BTN_LEFT";
+                          };
+                          meta.chord.BTN_LEFT = "ToggleScroll";
+                          meta.chord.BTN_RIGHT.ToggleLock = [
+                            "BTN_LEFT"
+                            "BTN_RIGHT"
+                          ];
+                          meta.chord.BTN_MIDDLE.Button = "BTN_SIDE";
+                          axis_map.regular = {
+                            "REL_X" = {
+                              axis = "REL_Y";
+                              factor = 0.1;
+                            };
+                          };
+                          axis_map.scroll = {
+                            "REL_X".axis = "REL_Y";
+                          };
+                        };
+                      };
+                    }
+                    self.homeManagerModules.default
+                  ];
+                };
+              in
+              eval.config.services.tweakpoint.settingsFile;
+          }
+        );
 }

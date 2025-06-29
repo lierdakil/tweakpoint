@@ -53,6 +53,7 @@ impl AxisMap {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(deny_unknown_fields)]
 pub struct AxisMapDef {
     pub axis: RelativeAxisCode,
     #[serde(default = "default_factor")]
