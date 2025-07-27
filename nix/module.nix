@@ -212,7 +212,7 @@ in
         default = true;
       };
       min_gesture_movement = mkOption {
-        type = u32;
+        type = ints.u32;
         description = "Minimum relative movement delta for gesture recognition";
         default = 5;
       };
