@@ -38,7 +38,7 @@ let
       };
       gesture = mkOptionType {
         name = "gesture";
-        description = "{ Gesture = { \"gesture_key\" = action } }";
+        description = "{ Gesture = { \"gesture_key\" = action } }, where gesture_key is a sequence of U, D, L, R";
         check =
           x: lib.length (lib.attrNames x) == 1 && x ? Gesture && (lib.types.attrsOf action).check x.Gesture;
         merge = lib.options.mergeEqualOption;

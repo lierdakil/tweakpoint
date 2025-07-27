@@ -340,7 +340,7 @@ Action when other button is pressed together with the meta button
 
 
 *Type:*
-attribute set of (one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }))
+attribute set of (one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R))
 
 
 
@@ -368,7 +368,7 @@ Click action
 
 
 *Type:*
-one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] })
+one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R)
 
 
 
@@ -386,7 +386,7 @@ Hold action
 
 
 *Type:*
-one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] })
+one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R)
 
 
 
@@ -445,7 +445,7 @@ Move action; action performed when pointer is moved while meta button is pressed
 
 
 *Type:*
-one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] })
+one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R)
 
 
 
