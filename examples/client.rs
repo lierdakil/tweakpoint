@@ -10,6 +10,15 @@ enum Step {
     WillRelease = 2,
 }
 
+#[repr(u8)]
+#[derive(Debug)]
+pub enum GestureDir {
+    U = 0,
+    D = 1,
+    L = 2,
+    R = 3,
+}
+
 #[derive(Debug)]
 #[expect(dead_code)]
 struct State {

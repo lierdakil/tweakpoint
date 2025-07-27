@@ -225,15 +225,17 @@ impl State {
         config: &Gestures,
     ) -> impl IntoIterator<Item = InputEvent> + use<> {
         // TODO: too much cloning happening here
-        let key = self
-            .gesture_dir
+        let Some(gesture_dir) = self.gesture_dir.take() else {
+            return std::iter::empty().left();
+        };
+        let key = gesture_dir
             .iter()
             .map(|x| format!("{x:?}"))
             .collect::<Vec<_>>()
             .join("");
-        self.gesture_dir = None;
         tracing::debug!(?key, "Gesture activated");
         if let Some(action) = config.get(&key) {
+            tracing::debug!(?action, "Gesture action");
             action
                 .run(self, Direction::Down, "Gesture down")
                 .into_iter()

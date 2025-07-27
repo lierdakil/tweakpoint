@@ -41,7 +41,7 @@ impl Controller {
                 out.push(*dir as u8);
             }
             let len = (out.len() - pos2) as u32;
-            out[pos2 - 4..pos].copy_from_slice(&len.to_le_bytes());
+            out[pos2 - 4..pos2].copy_from_slice(&len.to_le_bytes());
         }
         let len = (out.len() - pos) as u32;
         out[pos - 4..pos].copy_from_slice(&len.to_le_bytes());
