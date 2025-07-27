@@ -120,10 +120,10 @@ fn main() {
             .gesture
             .iter()
             .map(|x| match x {
-                GestureDir::U => "",
-                GestureDir::D => "",
-                GestureDir::L => "",
-                GestureDir::R => "",
+                GestureDir::U => "↑",
+                GestureDir::D => "↓",
+                GestureDir::L => "←",
+                GestureDir::R => "→",
             })
             .collect::<String>();
         let text = format!("{scroll_lock}{btn_lock}{gesture}");
