@@ -8,7 +8,7 @@ use evdev::{BusType, EventType, InputEvent, KeyCode, RelativeAxisCode};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 
-use crate::{state::State, utils::EitherIter};
+use crate::{state::State, utils::IteratorExt};
 
 #[derive(Serialize, Deserialize, SmartDefault)]
 #[serde(default, deny_unknown_fields)]
@@ -82,12 +82,15 @@ pub struct MetaConfig {
     pub click: Action,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+pub type Gestures = HashMap<String, Action>;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Action {
     None,
     ToggleScroll,
     ToggleLock(BTreeSet<KeyCode>),
     Button(KeyCode),
+    Gesture(Gestures),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -109,17 +112,23 @@ impl Action {
             Action::ToggleScroll if matches!(dir, Direction::Down) => {
                 tracing::debug!("ToggleScroll action executing");
                 state.scroll.toggle();
-                None.into()
+                None.left().left()
             }
             Action::Button(key_code) => {
                 tracing::debug!(?key_code, "Button action executing");
-                Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32)).into()
+                Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32))
+                    .left()
+                    .left()
             }
             Action::ToggleLock(lock_btns) if matches!(dir, Direction::Down) => {
                 tracing::debug!(?lock_btns, "ToggleLock action executing");
-                EitherIter::right(state.lock.toggle(lock_btns))
+                state.lock.toggle(lock_btns).right().right()
             }
-            _ => None.into(),
+            Action::Gesture(config) => match dir {
+                Direction::Down => state.start_gesture().right().left(),
+                Direction::Up => state.end_gesture(config).left().right(),
+            },
+            Action::ToggleScroll | Action::ToggleLock(_) | Action::None => None.left().left(),
         }
     }
 }

@@ -36,11 +36,19 @@ let
           x: lib.length (lib.attrNames x) == 1 && x ? ToggleLock && (listOf key_code).check x.ToggleLock;
         merge = lib.options.mergeEqualOption;
       };
+      gesture = mkOptionType {
+        name = "gesture";
+        description = "{ Gesture = { \"gesture_key\" = action } }";
+        check =
+          x: lib.length (lib.attrNames x) == 1 && x ? Gesture && (lib.types.attrsOf action).check x.Gesture;
+        merge = lib.options.mergeEqualOption;
+      };
     in
     oneOf [
       simple
       button
       lock
+      gesture
     ];
   axisDef =
     with lib.types;

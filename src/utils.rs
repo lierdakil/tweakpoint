@@ -45,3 +45,19 @@ impl<L, R> EitherIter<L, R> {
         Self::Right(v.into_iter())
     }
 }
+
+pub trait IteratorExt: Sized + IntoIterator {
+    fn left<T>(self) -> EitherIter<Self::IntoIter, T>;
+
+    fn right<T>(self) -> EitherIter<T, Self::IntoIter>;
+}
+
+impl<T: IntoIterator> IteratorExt for T {
+    fn left<U>(self) -> EitherIter<Self::IntoIter, U> {
+        EitherIter::Left(self.into_iter())
+    }
+
+    fn right<U>(self) -> EitherIter<U, Self::IntoIter> {
+        EitherIter::Right(self.into_iter())
+    }
+}

@@ -2,7 +2,7 @@ use evdev::{EventType, InputEvent, KeyCode, RelativeAxisCode};
 
 use crate::{
     config::{Config, Direction},
-    state::{ActionType, State},
+    state::{ActionType, GestureDir, State},
 };
 
 pub struct Controller {
@@ -10,6 +10,7 @@ pub struct Controller {
     config: Config,
     synthetic_tx: tokio::sync::mpsc::UnboundedSender<InputEvent>,
     synthetic_rx: tokio::sync::mpsc::UnboundedReceiver<InputEvent>,
+    relative_movement: (i32, i32),
 }
 
 impl Controller {
@@ -20,6 +21,7 @@ impl Controller {
             config,
             synthetic_rx,
             synthetic_tx,
+            relative_movement: (0, 0),
         }
     }
 
@@ -105,6 +107,40 @@ impl Controller {
         }
     }
 
+    pub fn start_transaciton(&mut self) {
+        self.relative_movement = (0, 0);
+    }
+
+    pub fn end_transaciton(&mut self) {
+        tracing::trace!(?self.relative_movement, "Relative movement");
+        if self.relative_movement.0.abs() <= 5 && self.relative_movement.1.abs() <= 5 {
+            // movement is insignificant
+            return;
+        }
+        let dir = if self.relative_movement.0.abs() > self.relative_movement.1.abs() {
+            // X axis
+            if self.relative_movement.0 > 0 {
+                GestureDir::R
+            } else {
+                GestureDir::L
+            }
+        } else {
+            // Y axis
+            if self.relative_movement.1 > 0 {
+                GestureDir::D
+            } else {
+                GestureDir::U
+            }
+        };
+        if let Some(last) = self.state.gesture_dir.last()
+            && last == &dir
+        {
+            // do nothing
+        } else {
+            self.state.gesture_dir.push(dir);
+        }
+    }
+
     pub fn relative(&mut self, axis: RelativeAxisCode, value: i32) {
         if self.state.meta_down.activate_waiting(ActionType::Move) {
             let evts =
@@ -113,6 +149,14 @@ impl Controller {
                     .r#move
                     .run(&mut self.state, Direction::Down, "Move activated");
             self.send_events(evts);
+        }
+
+        if self.state.gesture_active {
+            match axis {
+                RelativeAxisCode::REL_X => self.relative_movement.0 += value,
+                RelativeAxisCode::REL_Y => self.relative_movement.1 += value,
+                _ => {}
+            }
         }
 
         let new_axis = self.config.axis_map.get(axis, self.state.scroll.active);

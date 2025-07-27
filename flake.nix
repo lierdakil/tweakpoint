@@ -29,7 +29,7 @@
     in
     {
       homeManagerModules.default = import ./nix/module.nix self;
-      overlays.default = prev: final: {
+      overlays.default = final: prev: {
         tweakpoint = mkPackage final;
       };
     }
@@ -99,6 +99,7 @@
                             "BTN_RIGHT"
                           ];
                           meta.chord.BTN_MIDDLE.Button = "BTN_SIDE";
+                          meta.move.Gesture.DR.Button = "KEY_CLOSE";
                           axis_map.regular = {
                             "REL_X" = {
                               axis = "REL_Y";

@@ -175,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
             }
         };
 
+        controller.start_transaciton();
         loop {
             match ev.event_type() {
                 EventType::SYNCHRONIZATION if ev.code() == SynchronizationCode::SYN_REPORT.0 => {
@@ -196,6 +197,7 @@ async fn main() -> anyhow::Result<()> {
             ev = stream.next_event().await?;
             tracing::trace!(?ev, "Event physical -> virtual");
         }
+        controller.end_transaciton();
     }
 }
 

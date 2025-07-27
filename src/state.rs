@@ -7,8 +7,8 @@ use std::{
 use evdev::{EventType, InputEvent, KeyCode, RelativeAxisCode};
 
 use crate::{
-    config::{Action, Direction, MetaConfig},
-    utils::EitherIter,
+    config::{Action, Direction, Gestures, MetaConfig},
+    utils::{EitherIter, IteratorExt},
 };
 
 #[derive(Default)]
@@ -16,6 +16,16 @@ pub struct State {
     pub meta_down: MetaDown,
     pub scroll: ScrollState,
     pub lock: LockState,
+    pub gesture_active: bool,
+    pub gesture_dir: Vec<GestureDir>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GestureDir {
+    U,
+    D,
+    L,
+    R,
 }
 
 #[derive(Default)]
@@ -203,6 +213,37 @@ impl State {
         };
         self.meta_down.reset();
         evt
+    }
+
+    pub fn start_gesture(&mut self) -> impl IntoIterator<Item = InputEvent> + use<> {
+        self.gesture_active = true;
+        self.gesture_dir = vec![];
+        std::iter::empty()
+    }
+
+    pub fn end_gesture(
+        &mut self,
+        config: &Gestures,
+    ) -> impl IntoIterator<Item = InputEvent> + use<> {
+        // TODO: too much cloning happening here
+        let key = self
+            .gesture_dir
+            .iter()
+            .map(|x| format!("{x:?}"))
+            .collect::<Vec<_>>()
+            .join("");
+        tracing::debug!(?key, "Gesture activated");
+        if let Some(action) = config.get(&key) {
+            action
+                .run(self, Direction::Down, "Gesture down")
+                .into_iter()
+                .chain(action.run(self, Direction::Up, "Gesture up"))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .right()
+        } else {
+            std::iter::empty().left()
+        }
     }
 }
 
