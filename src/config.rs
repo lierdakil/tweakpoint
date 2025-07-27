@@ -119,7 +119,7 @@ impl Action {
                 None.left().left()
             }
             Action::Button(key_code) => {
-                tracing::debug!(?key_code, "Button action executing");
+                tracing::debug!(?key_code, ?dir, "Button action executing");
                 Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32))
                     .left()
                     .left()

@@ -86,12 +86,12 @@ impl Controller {
                 tracing::debug!(orig = ?key_code, ?new, "Mapped key press");
             })
             .unwrap_or(&key_code);
-        if self
-            .state
-            .meta_down
-            .activate_waiting(ActionType::Chord(*mapped_key))
-        {
-            if let Some(action) = self.config.meta.chord.get(mapped_key) {
+        if let Some(action) = self.config.meta.chord.get(mapped_key) {
+            if self
+                .state
+                .meta_down
+                .activate_waiting(ActionType::Chord(*mapped_key))
+            {
                 tracing::debug!(key = ?mapped_key, "Activated chord");
                 let evts = action.run(
                     &mut self.state,
@@ -105,15 +105,16 @@ impl Controller {
                 self.send_events(evts);
                 // don't pass go, don't emit the chorded button.
                 return;
-            } else {
-                let evts = self.config.meta.hold.run(
-                    &mut self.state,
-                    Direction::Down,
-                    "Hold activated on other button",
-                );
-                self.send_events(evts);
             }
+        } else if self.state.meta_down.activate_waiting(ActionType::Hold) {
+            let evts = self.config.meta.hold.run(
+                &mut self.state,
+                Direction::Down,
+                "Hold activated on other button",
+            );
+            self.send_events(evts);
         }
+
         if let Some(mapped_key) = self.state.lock.check(mapped_key, value) {
             self.send_events([InputEvent::new(EventType::KEY.0, mapped_key.0, value)]);
         }
