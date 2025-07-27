@@ -34,6 +34,15 @@ impl Controller {
             out.extend_from_slice(&lock_btn.0.to_le_bytes());
             out.push(lock_step as u8);
         }
+        out.extend_from_slice(&[0; 4]);
+        let pos2 = out.len();
+        if let Some(dirs) = &self.state.gesture_dir {
+            for dir in dirs {
+                out.push(*dir as u8);
+            }
+            let len = (out.len() - pos2) as u32;
+            out[pos2 - 4..pos].copy_from_slice(&len.to_le_bytes());
+        }
         let len = (out.len() - pos) as u32;
         out[pos - 4..pos].copy_from_slice(&len.to_le_bytes());
     }
@@ -112,32 +121,30 @@ impl Controller {
     }
 
     pub fn end_transaciton(&mut self) {
-        tracing::trace!(?self.relative_movement, "Relative movement");
-        if self.relative_movement.0.abs() <= 5 && self.relative_movement.1.abs() <= 5 {
-            // movement is insignificant
-            return;
-        }
-        let dir = if self.relative_movement.0.abs() > self.relative_movement.1.abs() {
-            // X axis
-            if self.relative_movement.0 > 0 {
-                GestureDir::R
-            } else {
-                GestureDir::L
+        if let Some(gesture_dir) = &mut self.state.gesture_dir {
+            tracing::trace!(?self.relative_movement, "Relative movement");
+            if self.relative_movement.0.abs() <= 5 && self.relative_movement.1.abs() <= 5 {
+                // movement is insignificant
+                return;
             }
-        } else {
-            // Y axis
-            if self.relative_movement.1 > 0 {
-                GestureDir::D
+            let dir = if self.relative_movement.0.abs() > self.relative_movement.1.abs() {
+                // X axis
+                if self.relative_movement.0 > 0 {
+                    GestureDir::R
+                } else {
+                    GestureDir::L
+                }
             } else {
-                GestureDir::U
+                // Y axis
+                if self.relative_movement.1 > 0 {
+                    GestureDir::D
+                } else {
+                    GestureDir::U
+                }
+            };
+            if gesture_dir.last() != Some(&dir) {
+                gesture_dir.push(dir);
             }
-        };
-        if let Some(last) = self.state.gesture_dir.last()
-            && last == &dir
-        {
-            // do nothing
-        } else {
-            self.state.gesture_dir.push(dir);
         }
     }
 
@@ -151,12 +158,10 @@ impl Controller {
             self.send_events(evts);
         }
 
-        if self.state.gesture_active {
-            match axis {
-                RelativeAxisCode::REL_X => self.relative_movement.0 += value,
-                RelativeAxisCode::REL_Y => self.relative_movement.1 += value,
-                _ => {}
-            }
+        match axis {
+            RelativeAxisCode::REL_X => self.relative_movement.0 += value,
+            RelativeAxisCode::REL_Y => self.relative_movement.1 += value,
+            _ => {}
         }
 
         let new_axis = self.config.axis_map.get(axis, self.state.scroll.active);

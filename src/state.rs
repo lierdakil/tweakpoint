@@ -16,16 +16,16 @@ pub struct State {
     pub meta_down: MetaDown,
     pub scroll: ScrollState,
     pub lock: LockState,
-    pub gesture_active: bool,
-    pub gesture_dir: Vec<GestureDir>,
+    pub gesture_dir: Option<Vec<GestureDir>>,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GestureDir {
-    U,
-    D,
-    L,
-    R,
+    U = 0,
+    D = 1,
+    L = 2,
+    R = 3,
 }
 
 #[derive(Default)]
@@ -216,8 +216,7 @@ impl State {
     }
 
     pub fn start_gesture(&mut self) -> impl IntoIterator<Item = InputEvent> + use<> {
-        self.gesture_active = true;
-        self.gesture_dir = vec![];
+        self.gesture_dir = Some(vec![]);
         std::iter::empty()
     }
 
@@ -232,6 +231,7 @@ impl State {
             .map(|x| format!("{x:?}"))
             .collect::<Vec<_>>()
             .join("");
+        self.gesture_dir = None;
         tracing::debug!(?key, "Gesture activated");
         if let Some(action) = config.get(&key) {
             action
