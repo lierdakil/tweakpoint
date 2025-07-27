@@ -216,6 +216,11 @@ in
         description = "Minimum relative movement delta for gesture recognition";
         default = 5;
       };
+      move_during_gesture = mkOption {
+        type = bool;
+        description = "Pass through movement during gesture";
+        default = true;
+      };
       meta = {
         key = mkOption {
           type = key_code;

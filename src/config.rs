@@ -32,6 +32,8 @@ pub struct Config {
     pub hi_res_enabled: bool,
     #[default(5)]
     pub min_gesture_movement: u32,
+    #[default(true)]
+    pub move_during_gesture: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

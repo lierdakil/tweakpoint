@@ -160,7 +160,10 @@ impl Controller {
             self.send_events(evts);
         }
 
-        match axis {
+        // this is a little weird: use remapped axes for gestures, but ignore
+        // scroll toggle and axis factors. There may be a more natural option
+        // hiding here somewhere but I don't see it.
+        match self.config.axis_map.get(axis, false).axis {
             RelativeAxisCode::REL_X => self.relative_movement.0 += value,
             RelativeAxisCode::REL_Y => self.relative_movement.1 += value,
             _ => {}
@@ -171,11 +174,14 @@ impl Controller {
             .state
             .scroll
             .scroll(new_axis.axis, value, new_axis.factor);
-        self.send_events([InputEvent::new(
-            EventType::RELATIVE.0,
-            new_axis.axis.0,
-            new_value,
-        )]);
+
+        if self.config.move_during_gesture || self.state.gesture_dir.is_none() {
+            self.send_events([InputEvent::new(
+                EventType::RELATIVE.0,
+                new_axis.axis.0,
+                new_value,
+            )]);
+        }
     }
 
     pub async fn next_events(&mut self, buf: &mut Vec<InputEvent>) -> usize {
