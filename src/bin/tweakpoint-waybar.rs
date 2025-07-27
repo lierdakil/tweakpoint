@@ -1,3 +1,5 @@
+//! Waybar sample client
+
 use std::{collections::BTreeMap, io::Read};
 
 use evdev::KeyCode;
@@ -20,7 +22,6 @@ pub enum GestureDir {
 }
 
 #[derive(Debug)]
-#[expect(dead_code)]
 struct State {
     scroll_active: bool,
     buttons: BTreeMap<KeyCode, Step>,
@@ -92,14 +93,40 @@ impl State {
 }
 
 fn main() {
-    let mut socket =
-        std::os::unix::net::UnixStream::connect(std::env::args().nth(1).unwrap()).unwrap();
+    let mut socket = std::os::unix::net::UnixStream::connect(
+        std::env::args()
+            .nth(1)
+            .unwrap_or("/tmp/tweakpoint.sock".to_owned()),
+    )
+    .unwrap();
     let mut size = [0; 4];
     loop {
         socket.read_exact(&mut size).unwrap();
         let mut buf = vec![0; u32::from_le_bytes(size) as usize];
         socket.read_exact(buf.as_mut_slice()).unwrap();
         let ptr = &mut buf.as_slice();
-        println!("{:#?}", State::from_bytes(ptr));
+        let state = State::from_bytes(ptr);
+        let scroll_lock = if state.scroll_active { "󰆾" } else { "" };
+        let btn_lock = if !state.buttons.is_empty() {
+            if state.buttons.values().any(|x| matches!(x, Step::Locked)) {
+                "󱕐"
+            } else {
+                "󱕑"
+            }
+        } else {
+            ""
+        };
+        let gesture = state
+            .gesture
+            .iter()
+            .map(|x| match x {
+                GestureDir::U => "",
+                GestureDir::D => "",
+                GestureDir::L => "",
+                GestureDir::R => "",
+            })
+            .collect::<String>();
+        let text = format!("{scroll_lock}{btn_lock}{gesture}");
+        println!(r#"{{ "text": "{text}", "class": "tweakpoint" }}"#,);
     }
 }
