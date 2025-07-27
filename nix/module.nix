@@ -211,6 +211,11 @@ in
         description = "Enable high-resolution wheel events?";
         default = true;
       };
+      min_gesture_movement = mkOption {
+        type = u32;
+        description = "Minimum relative movement delta for gesture recognition";
+        default = 5;
+      };
       meta = {
         key = mkOption {
           type = key_code;

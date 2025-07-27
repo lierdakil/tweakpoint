@@ -30,6 +30,8 @@ pub struct Config {
     pub bus: BusType,
     pub axis_map: AxisMap,
     pub hi_res_enabled: bool,
+    #[default(5)]
+    pub min_gesture_movement: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

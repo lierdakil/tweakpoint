@@ -175,7 +175,6 @@ async fn main() -> anyhow::Result<()> {
             }
         };
 
-        controller.start_transaciton();
         loop {
             match ev.event_type() {
                 EventType::SYNCHRONIZATION if ev.code() == SynchronizationCode::SYN_REPORT.0 => {
@@ -188,16 +187,16 @@ async fn main() -> anyhow::Result<()> {
                 }
                 _ => controller.passthrough(ev),
             }
-            if let Some(state_vec_tx) = &state_vec_tx {
-                state_vec_tx.send_modify(|x| {
-                    x.clear();
-                    controller.state_vec(x);
-                });
-            }
             ev = stream.next_event().await?;
             tracing::trace!(?ev, "Event physical -> virtual");
         }
         controller.end_transaciton();
+        if let Some(state_vec_tx) = &state_vec_tx {
+            state_vec_tx.send_modify(|x| {
+                x.clear();
+                controller.state_vec(x);
+            });
+        }
     }
 }
 

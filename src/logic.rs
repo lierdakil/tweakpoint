@@ -119,27 +119,26 @@ impl Controller {
         }
     }
 
-    pub fn start_transaciton(&mut self) {
-        self.relative_movement = (0, 0);
-    }
-
     pub fn end_transaciton(&mut self) {
+        if self.relative_movement.0.unsigned_abs() <= self.config.min_gesture_movement
+            && self.relative_movement.1.unsigned_abs() <= self.config.min_gesture_movement
+        {
+            // movement is insignificant
+            return;
+        }
+        let relative_movement = std::mem::take(&mut self.relative_movement);
         if let Some(gesture_dir) = &mut self.state.gesture_dir {
-            tracing::trace!(?self.relative_movement, "Relative movement");
-            if self.relative_movement.0.abs() <= 5 && self.relative_movement.1.abs() <= 5 {
-                // movement is insignificant
-                return;
-            }
-            let dir = if self.relative_movement.0.abs() > self.relative_movement.1.abs() {
+            tracing::trace!(?relative_movement, "Relative movement");
+            let dir = if relative_movement.0.abs() > relative_movement.1.abs() {
                 // X axis
-                if self.relative_movement.0 > 0 {
+                if relative_movement.0 > 0 {
                     GestureDir::R
                 } else {
                     GestureDir::L
                 }
             } else {
                 // Y axis
-                if self.relative_movement.1 > 0 {
+                if relative_movement.1 > 0 {
                     GestureDir::D
                 } else {
                     GestureDir::U
