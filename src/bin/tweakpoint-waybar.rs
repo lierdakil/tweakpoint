@@ -5,20 +5,18 @@ use std::{collections::BTreeMap, io::Read};
 use evdev::KeyCode;
 
 #[derive(Debug)]
-#[repr(u8)]
 enum Step {
-    Released = 0,
-    Locked = 1,
-    WillRelease = 2,
+    Released,
+    Locked,
+    WillRelease,
 }
 
-#[repr(u8)]
 #[derive(Debug)]
 pub enum GestureDir {
-    U = 0,
-    D = 1,
-    L = 2,
-    R = 3,
+    U,
+    D,
+    L,
+    R,
 }
 
 #[derive(Debug)]
@@ -53,9 +51,9 @@ impl State {
                 buttons.insert(
                     key_code,
                     match state {
-                        0 => Step::Released,
-                        1 => Step::Locked,
-                        2 => Step::WillRelease,
+                        b'R' => Step::Released,
+                        b'L' => Step::Locked,
+                        b'W' => Step::WillRelease,
                         _ => {
                             eprintln!("Unexpected button state for {key_code:?}: {state}");
                             continue;
@@ -72,10 +70,10 @@ impl State {
                 ptr.read_exact(&mut byte).unwrap();
                 let byte = byte[0];
                 gesture.push(match byte {
-                    0 => GestureDir::U,
-                    1 => GestureDir::D,
-                    2 => GestureDir::L,
-                    3 => GestureDir::R,
+                    b'U' => GestureDir::U,
+                    b'D' => GestureDir::D,
+                    b'L' => GestureDir::L,
+                    b'R' => GestureDir::R,
                     _ => {
                         eprintln!("Unexpected gesture direction {byte}");
                         continue;

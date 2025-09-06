@@ -22,10 +22,10 @@ pub struct State {
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GestureDir {
-    U = 0,
-    D = 1,
-    L = 2,
-    R = 3,
+    U = b'U',
+    D = b'D',
+    L = b'L',
+    R = b'R',
 }
 
 #[derive(Default)]
@@ -37,12 +37,12 @@ pub struct LockState {
 #[repr(u8)]
 pub enum LockStep {
     /// Button is ostensibly released both physically and logically.
-    Released = 0,
+    Released = b'R',
     /// Button is logically held but physically released
-    Locked = 1,
+    Locked = b'L',
     /// Button is both logically and physically held, but will be released on
     /// physical release.
-    WillRelease = 2,
+    WillRelease = b'W',
 }
 
 impl LockStep {
