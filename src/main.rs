@@ -175,22 +175,28 @@ async fn main() -> anyhow::Result<()> {
             }
         };
 
-        loop {
-            match ev.event_type() {
-                EventType::SYNCHRONIZATION if ev.code() == SynchronizationCode::SYN_REPORT.0 => {
-                    break;
+        {
+            let mut transaction = controller.start_transaction();
+            loop {
+                match ev.event_type() {
+                    EventType::SYNCHRONIZATION
+                        if ev.code() == SynchronizationCode::SYN_REPORT.0 =>
+                    {
+                        break;
+                    }
+                    EventType::KEY => transaction.button(KeyCode(ev.code()), ev.value()),
+                    EventType::RELATIVE => {
+                        transaction.relative(RelativeAxisCode(ev.code()), ev.value())
+                    }
+                    EventType::MISC if ev.code() == MiscCode::MSC_SCAN.0 => {
+                        tracing::trace!(?ev, "Filtered out MSC_SCAN event");
+                    }
+                    _ => transaction.passthrough(ev),
                 }
-                EventType::KEY => controller.button(KeyCode(ev.code()), ev.value()),
-                EventType::RELATIVE => controller.relative(RelativeAxisCode(ev.code()), ev.value()),
-                EventType::MISC if ev.code() == MiscCode::MSC_SCAN.0 => {
-                    tracing::trace!(?ev, "Filtered out MSC_SCAN event");
-                }
-                _ => controller.passthrough(ev),
+                ev = stream.next_event().await?;
+                tracing::trace!(?ev, "Event physical -> virtual");
             }
-            ev = stream.next_event().await?;
-            tracing::trace!(?ev, "Event physical -> virtual");
         }
-        controller.end_transaciton();
         if let Some(state_vec_tx) = &state_vec_tx {
             state_vec_tx.send_modify(|x| {
                 x.clear();

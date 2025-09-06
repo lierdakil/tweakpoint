@@ -58,17 +58,40 @@ impl Controller {
         }
     }
 
+    pub fn start_transaction(&mut self) -> Transaction<'_> {
+        Transaction(self)
+    }
+
+    pub async fn next_events(&mut self, buf: &mut Vec<InputEvent>) -> usize {
+        loop {
+            tokio::select! {
+              _ = self.state.meta_down.wait() => {
+                  let evts = self.config.meta.hold.run(&mut self.state, Direction::Down, "Hold fired");
+                  self.send_events(evts);
+              },
+              n = self.synthetic_rx.recv_many(buf, usize::MAX) => {
+                  return n;
+              }
+            }
+        }
+    }
+}
+
+pub struct Transaction<'a>(&'a mut Controller);
+
+impl Transaction<'_> {
     pub fn button(&mut self, key_code: KeyCode, value: i32) {
-        if key_code == self.config.meta.key {
+        let ctl = &mut self.0;
+        if key_code == ctl.config.meta.key {
             match value {
                 1 => {
                     // meta key down
-                    let this = &mut *self;
+                    let this = &mut *ctl;
                     this.state.meta_down.start_wait(this.config.meta.hold_time);
                 }
                 0 => {
                     // meta key up
-                    let this = &mut *self;
+                    let this = &mut *ctl;
                     let evt = this.state.handle_meta_up(&this.config.meta);
                     this.send_events(evt);
                 }
@@ -78,7 +101,7 @@ impl Controller {
             // don't pass go, don't pass through meta key.
             return;
         }
-        let mapped_key = self
+        let mapped_key = ctl
             .config
             .btn_map
             .get(&key_code)
@@ -86,15 +109,15 @@ impl Controller {
                 tracing::debug!(orig = ?key_code, ?new, "Mapped key press");
             })
             .unwrap_or(&key_code);
-        if let Some(action) = self.config.meta.chord.get(mapped_key) {
-            if self
+        if let Some(action) = ctl.config.meta.chord.get(mapped_key) {
+            if ctl
                 .state
                 .meta_down
                 .activate_waiting(ActionType::Chord(*mapped_key))
             {
                 tracing::debug!(key = ?mapped_key, "Activated chord");
                 let evts = action.run(
-                    &mut self.state,
+                    &mut ctl.state,
                     if matches!(value, 1) {
                         Direction::Down
                     } else {
@@ -102,33 +125,75 @@ impl Controller {
                     },
                     "Chord activated",
                 );
-                self.send_events(evts);
+                ctl.send_events(evts);
                 // don't pass go, don't emit the chorded button.
                 return;
             }
-        } else if self.state.meta_down.activate_waiting(ActionType::Hold) {
-            let evts = self.config.meta.hold.run(
-                &mut self.state,
+        } else if ctl.state.meta_down.activate_waiting(ActionType::Hold) {
+            let evts = ctl.config.meta.hold.run(
+                &mut ctl.state,
                 Direction::Down,
                 "Hold activated on other button",
             );
-            self.send_events(evts);
+            ctl.send_events(evts);
         }
 
-        if let Some(mapped_key) = self.state.lock.check(mapped_key, value) {
-            self.send_events([InputEvent::new(EventType::KEY.0, mapped_key.0, value)]);
+        if let Some(mapped_key) = ctl.state.lock.check(mapped_key, value) {
+            ctl.send_events([InputEvent::new(EventType::KEY.0, mapped_key.0, value)]);
         }
     }
 
-    pub fn end_transaciton(&mut self) {
-        if self.relative_movement.0.unsigned_abs() <= self.config.min_gesture_movement
-            && self.relative_movement.1.unsigned_abs() <= self.config.min_gesture_movement
+    pub fn relative(&mut self, axis: RelativeAxisCode, value: i32) {
+        let ctl = &mut self.0;
+        if ctl.state.meta_down.activate_waiting(ActionType::Move) {
+            let evts =
+                ctl.config
+                    .meta
+                    .r#move
+                    .run(&mut ctl.state, Direction::Down, "Move activated");
+            ctl.send_events(evts);
+        }
+
+        // this is a little weird: use remapped axes for gestures, but ignore
+        // scroll toggle and axis factors. There may be a more natural option
+        // hiding here somewhere but I don't see it.
+        match ctl.config.axis_map.get(axis, false).axis {
+            RelativeAxisCode::REL_X => ctl.relative_movement.0 += value,
+            RelativeAxisCode::REL_Y => ctl.relative_movement.1 += value,
+            _ => {}
+        }
+
+        let new_axis = ctl.config.axis_map.get(axis, ctl.state.scroll.active);
+        let new_value = ctl
+            .state
+            .scroll
+            .scroll(new_axis.axis, value, new_axis.factor);
+
+        if ctl.config.move_during_gesture || ctl.state.gesture_dir.is_none() {
+            ctl.send_events([InputEvent::new(
+                EventType::RELATIVE.0,
+                new_axis.axis.0,
+                new_value,
+            )]);
+        }
+    }
+
+    pub fn passthrough(&self, ev: InputEvent) {
+        self.0.send_events([ev]);
+    }
+}
+
+impl Drop for Transaction<'_> {
+    fn drop(&mut self) {
+        let ctl = &mut self.0;
+        if ctl.relative_movement.0.unsigned_abs() <= ctl.config.min_gesture_movement
+            && ctl.relative_movement.1.unsigned_abs() <= ctl.config.min_gesture_movement
         {
             // movement is insignificant
             return;
         }
-        let relative_movement = std::mem::take(&mut self.relative_movement);
-        if let Some(gesture_dir) = &mut self.state.gesture_dir {
+        let relative_movement = std::mem::take(&mut ctl.relative_movement);
+        if let Some(gesture_dir) = &mut ctl.state.gesture_dir {
             tracing::trace!(?relative_movement, "Relative movement");
             let dir = if relative_movement.0.abs() > relative_movement.1.abs() {
                 // X axis
@@ -149,57 +214,5 @@ impl Controller {
                 gesture_dir.push(dir);
             }
         }
-    }
-
-    pub fn relative(&mut self, axis: RelativeAxisCode, value: i32) {
-        if self.state.meta_down.activate_waiting(ActionType::Move) {
-            let evts =
-                self.config
-                    .meta
-                    .r#move
-                    .run(&mut self.state, Direction::Down, "Move activated");
-            self.send_events(evts);
-        }
-
-        // this is a little weird: use remapped axes for gestures, but ignore
-        // scroll toggle and axis factors. There may be a more natural option
-        // hiding here somewhere but I don't see it.
-        match self.config.axis_map.get(axis, false).axis {
-            RelativeAxisCode::REL_X => self.relative_movement.0 += value,
-            RelativeAxisCode::REL_Y => self.relative_movement.1 += value,
-            _ => {}
-        }
-
-        let new_axis = self.config.axis_map.get(axis, self.state.scroll.active);
-        let new_value = self
-            .state
-            .scroll
-            .scroll(new_axis.axis, value, new_axis.factor);
-
-        if self.config.move_during_gesture || self.state.gesture_dir.is_none() {
-            self.send_events([InputEvent::new(
-                EventType::RELATIVE.0,
-                new_axis.axis.0,
-                new_value,
-            )]);
-        }
-    }
-
-    pub async fn next_events(&mut self, buf: &mut Vec<InputEvent>) -> usize {
-        loop {
-            tokio::select! {
-              _ = self.state.meta_down.wait() => {
-                  let evts = self.config.meta.hold.run(&mut self.state, Direction::Down, "Hold fired");
-                  self.send_events(evts);
-              },
-              n = self.synthetic_rx.recv_many(buf, usize::MAX) => {
-                  return n;
-              }
-            }
-        }
-    }
-
-    pub fn passthrough(&self, ev: InputEvent) {
-        self.send_events([ev]);
     }
 }
