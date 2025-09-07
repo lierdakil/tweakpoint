@@ -10,7 +10,6 @@ pub struct Controller {
     config: Config,
     synthetic_tx: tokio::sync::mpsc::UnboundedSender<InputEvent>,
     synthetic_rx: tokio::sync::mpsc::UnboundedReceiver<InputEvent>,
-    relative_movement: (i32, i32),
 }
 
 impl Controller {
@@ -21,7 +20,6 @@ impl Controller {
             config,
             synthetic_rx,
             synthetic_tx,
-            relative_movement: (0, 0),
         }
     }
 
@@ -59,7 +57,7 @@ impl Controller {
     }
 
     pub fn start_transaction(&mut self) -> Transaction<'_> {
-        Transaction(self)
+        Transaction::new(self)
     }
 
     pub async fn next_events(&mut self, buf: &mut Vec<InputEvent>) -> usize {
@@ -77,23 +75,31 @@ impl Controller {
     }
 }
 
-pub struct Transaction<'a>(&'a mut Controller);
+pub struct Transaction<'a> {
+    ctl: &'a mut Controller,
+    relative_movement: (i32, i32),
+}
 
-impl Transaction<'_> {
+impl<'a> Transaction<'a> {
+    fn new(ctl: &'a mut Controller) -> Self {
+        Self {
+            ctl,
+            relative_movement: (0, 0),
+        }
+    }
+
     pub fn button(&mut self, key_code: KeyCode, value: i32) {
-        let ctl = &mut self.0;
+        let ctl = &mut self.ctl;
         if key_code == ctl.config.meta.key {
             match value {
                 1 => {
                     // meta key down
-                    let this = &mut *ctl;
-                    this.state.meta_down.start_wait(this.config.meta.hold_time);
+                    ctl.state.meta_down.start_wait(ctl.config.meta.hold_time);
                 }
                 0 => {
                     // meta key up
-                    let this = &mut *ctl;
-                    let evt = this.state.handle_meta_up(&this.config.meta);
-                    this.send_events(evt);
+                    let evt = ctl.state.handle_meta_up(&ctl.config.meta);
+                    ctl.send_events(evt);
                 }
                 // meta key ???
                 _ => {}
@@ -144,7 +150,7 @@ impl Transaction<'_> {
     }
 
     pub fn relative(&mut self, axis: RelativeAxisCode, value: i32) {
-        let ctl = &mut self.0;
+        let ctl = &mut self.ctl;
         if ctl.state.meta_down.activate_waiting(ActionType::Move) {
             let evts =
                 ctl.config
@@ -158,8 +164,8 @@ impl Transaction<'_> {
         // scroll toggle and axis factors. There may be a more natural option
         // hiding here somewhere but I don't see it.
         match ctl.config.axis_map.get(axis, false).axis {
-            RelativeAxisCode::REL_X => ctl.relative_movement.0 += value,
-            RelativeAxisCode::REL_Y => ctl.relative_movement.1 += value,
+            RelativeAxisCode::REL_X => self.relative_movement.0 += value,
+            RelativeAxisCode::REL_Y => self.relative_movement.1 += value,
             _ => {}
         }
 
@@ -179,20 +185,22 @@ impl Transaction<'_> {
     }
 
     pub fn passthrough(&self, ev: InputEvent) {
-        self.0.send_events([ev]);
+        self.ctl.send_events([ev]);
     }
 }
 
 impl Drop for Transaction<'_> {
     fn drop(&mut self) {
-        let ctl = &mut self.0;
-        if ctl.relative_movement.0.unsigned_abs() <= ctl.config.min_gesture_movement
-            && ctl.relative_movement.1.unsigned_abs() <= ctl.config.min_gesture_movement
+        let Self {
+            ctl,
+            relative_movement,
+        } = self;
+        if relative_movement.0.unsigned_abs() <= ctl.config.min_gesture_movement
+            && relative_movement.1.unsigned_abs() <= ctl.config.min_gesture_movement
         {
             // movement is insignificant
             return;
         }
-        let relative_movement = std::mem::take(&mut ctl.relative_movement);
         if let Some(gesture_dir) = &mut ctl.state.gesture_dir {
             tracing::trace!(?relative_movement, "Relative movement");
             let dir = if relative_movement.0.abs() > relative_movement.1.abs() {
