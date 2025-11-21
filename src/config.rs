@@ -92,6 +92,7 @@ pub type Gestures = HashMap<String, Action>;
 pub enum Action {
     None,
     ToggleScroll,
+    ToggleSlow(f64),
     ToggleLock(BTreeSet<KeyCode>),
     Button(KeyCode),
     Gesture(Gestures),
@@ -118,6 +119,11 @@ impl Action {
                 state.scroll.toggle();
                 None.left().left()
             }
+            Action::ToggleSlow(factor) if matches!(dir, Direction::Down) => {
+                tracing::debug!("ToggleScroll action executing");
+                state.slow = state.slow.is_none().then_some(*factor);
+                None.left().left()
+            }
             Action::Button(key_code) => {
                 tracing::debug!(?key_code, ?dir, "Button action executing");
                 Some(InputEvent::new(EventType::KEY.0, key_code.0, dir as i32))
@@ -132,7 +138,10 @@ impl Action {
                 Direction::Down => state.start_gesture().right().left(),
                 Direction::Up => state.end_gesture(config).left().right(),
             },
-            Action::ToggleScroll | Action::ToggleLock(_) | Action::None => None.left().left(),
+            Action::ToggleScroll
+            | Action::ToggleSlow { .. }
+            | Action::ToggleLock(_)
+            | Action::None => None.left().left(),
         }
     }
 }

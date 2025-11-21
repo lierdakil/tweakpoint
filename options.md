@@ -340,7 +340,7 @@ Action when other button is pressed together with the meta button
 
 
 *Type:*
-attribute set of (one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R))
+attribute set of (one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R) or ({ ToggleSlow = float }))
 
 
 
@@ -368,7 +368,7 @@ Click action
 
 
 *Type:*
-one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R)
+one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R) or ({ ToggleSlow = float })
 
 
 
@@ -386,7 +386,7 @@ Hold action
 
 
 *Type:*
-one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R)
+one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R) or ({ ToggleSlow = float })
 
 
 
@@ -445,12 +445,48 @@ Move action; action performed when pointer is moved while meta button is pressed
 
 
 *Type:*
-one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R)
+one of “None”, “ToggleScroll” or ({ Button = key_code }) or ({ ToggleLock = \[ key_code ] }) or ({ Gesture = { “gesture_key” = action } }, where gesture_key is a sequence of U, D, L, R) or ({ ToggleSlow = float })
 
 
 
 *Default:*
 ` "None" `
+
+
+
+## services\.tweakpoint\.settings\.min_gesture_movement
+
+
+
+Minimum relative movement delta for gesture recognition
+
+
+
+*Type:*
+32 bit unsigned integer; between 0 and 4294967295 (both inclusive)
+
+
+
+*Default:*
+` 5 `
+
+
+
+## services\.tweakpoint\.settings\.move_during_gesture
+
+
+
+Pass through movement during gesture
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 
 

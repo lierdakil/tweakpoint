@@ -100,6 +100,8 @@
                           ];
                           meta.chord.BTN_MIDDLE.Button = "BTN_SIDE";
                           meta.move.Gesture.DR.Button = "KEY_CLOSE";
+                          meta.move.Gesture.U.ToggleSlow = 0.5;
+                          meta.move.Gesture.UD.ToggleSlow = 1;
                           axis_map.regular = {
                             "REL_X" = {
                               axis = "REL_Y";

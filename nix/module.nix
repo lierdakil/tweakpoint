@@ -43,12 +43,19 @@ let
           x: lib.length (lib.attrNames x) == 1 && x ? Gesture && (lib.types.attrsOf action).check x.Gesture;
         merge = lib.options.mergeEqualOption;
       };
+      slow = mkOptionType {
+        name = "slow";
+        description = "{ ToggleSlow = float }";
+        check = x: lib.length (lib.attrNames x) == 1 && x ? ToggleSlow && lib.types.num.check x.ToggleSlow;
+        merge = lib.options.mergeEqualOption;
+      };
     in
     oneOf [
       simple
       button
       lock
       gesture
+      slow
     ];
   axisDef =
     with lib.types;
@@ -262,31 +269,30 @@ in
   config = lib.mkIf conf.enable {
     systemd.user.services.tweakpoint = {
       Install.WantedBy = [ "default.target" ];
-      Service =
-        {
-          Environment = "PATH=${
-            lib.makeSearchPath "bin" (
-              [
-                pkgs.bash
-                pkgs.coreutils
-              ]
-              ++ conf.extraPkgs
-            )
-          }";
-          Type = "notify";
-          ExecStart = "${
-            lib.getExe' self.packages.${pkgs.system}.default "tweakpoint"
-          } --config ${config_toml}";
-          Restart = "always";
-        }
-        // (
-          if (conf.postScript != null) then
-            {
-              ExecStartPost = pkgs.writeScript "tweakpoint-post-start.sh" conf.postScript;
-            }
-          else
-            { }
-        );
+      Service = {
+        Environment = "PATH=${
+          lib.makeSearchPath "bin" (
+            [
+              pkgs.bash
+              pkgs.coreutils
+            ]
+            ++ conf.extraPkgs
+          )
+        }";
+        Type = "notify";
+        ExecStart = "${
+          lib.getExe' self.packages.${pkgs.system}.default "tweakpoint"
+        } --config ${config_toml}";
+        Restart = "always";
+      }
+      // (
+        if (conf.postScript != null) then
+          {
+            ExecStartPost = pkgs.writeScript "tweakpoint-post-start.sh" conf.postScript;
+          }
+        else
+          { }
+      );
     };
   };
 }

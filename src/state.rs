@@ -15,6 +15,7 @@ use crate::{
 pub struct State {
     pub meta_down: MetaDown,
     pub scroll: ScrollState,
+    pub slow: Option<f64>,
     pub lock: LockState,
     pub gesture_dir: Option<Vec<GestureDir>>,
 }

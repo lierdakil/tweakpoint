@@ -170,10 +170,11 @@ impl<'a> Transaction<'a> {
         }
 
         let new_axis = ctl.config.axis_map.get(axis, ctl.state.scroll.active);
-        let new_value = ctl
-            .state
-            .scroll
-            .scroll(new_axis.axis, value, new_axis.factor);
+        let new_value = ctl.state.scroll.scroll(
+            new_axis.axis,
+            value,
+            ctl.state.slow.unwrap_or(1.0) * new_axis.factor,
+        );
 
         if ctl.config.move_during_gesture || ctl.state.gesture_dir.is_none() {
             ctl.send_events([InputEvent::new(
