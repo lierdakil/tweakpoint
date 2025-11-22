@@ -45,6 +45,7 @@ impl Controller {
                     out.push(*dir as u8);
                 }
             });
+            out.extend_from_slice(&self.state.slow.unwrap_or(1.0).to_le_bytes())
         });
     }
 
