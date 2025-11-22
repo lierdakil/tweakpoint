@@ -24,7 +24,7 @@ struct State {
     scroll_active: bool,
     buttons: BTreeMap<KeyCode, Step>,
     gesture: Vec<GestureDir>,
-    slow: f32,
+    slow: f64,
 }
 
 impl State {
@@ -83,9 +83,9 @@ impl State {
             }
             gesture
         });
-        let mut slow_bytes = [0; 4];
+        let mut slow_bytes = [0; 8];
         ptr.read_exact(&mut slow_bytes).unwrap();
-        let slow = f32::from_le_bytes(slow_bytes);
+        let slow = f64::from_le_bytes(slow_bytes);
         Self {
             scroll_active,
             buttons,
@@ -130,7 +130,7 @@ fn main() {
             })
             .collect::<String>();
         let slow = if state.slow != 1.0 {
-            format!("󰾆{}", state.slow)
+            format!(" 󰾆 {}", state.slow)
         } else {
             String::new()
         };
