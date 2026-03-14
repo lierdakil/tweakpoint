@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use clap::Parser;
 use evdev::{
@@ -87,8 +87,29 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let mut device = Device::open(&config.device)?;
-    device.grab()?;
+    const MIN_BACKOFF: Duration = Duration::from_millis(1);
+    const MAX_BACKOFF: Duration = Duration::from_secs(1);
+
+    let mut backoff = MIN_BACKOFF;
+    let device = loop {
+        let mut device = match Device::open(&config.device) {
+            Ok(x) => x,
+            Err(error) => {
+                tracing::error!(%error, device = %config.device.display(), "Error opening device");
+                tokio::time::sleep(backoff).await;
+                backoff = backoff.saturating_mul(2).min(MAX_BACKOFF);
+                continue;
+            }
+        };
+        match device.grab() {
+            Ok(()) => break device,
+            Err(error) => {
+                tracing::error!(%error, device = %config.device.display(), "Error grabbing device");
+                tokio::time::sleep(backoff).await;
+                backoff = backoff.saturating_mul(2).min(MAX_BACKOFF);
+            }
+        }
+    };
 
     tracing::debug!(?device, "Opened and grabbed device");
 
