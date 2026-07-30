@@ -1,0 +1,4 @@
+{
+  "settings.socket.label": "Socket Path",
+  "settings.socket.description": "Path to the tweakpoint Unix socket (e.g. /tmp/tweakpoint.sock)"
+}

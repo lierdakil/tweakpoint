@@ -1,0 +1,20 @@
+id = "lierdakil/noctalia-tweakpoint"
+name = "Tweakpoint"
+version = "1.0.0"
+plugin_api = 16
+author = "lierdakil"
+license = "MIT"
+tags = ["input", "trackball"]
+description = "Displays Tweakpoint state: scroll lock, button locks, speed, and gesture direction."
+
+[[widget]]
+id = "bar"
+entry = "widget.luau"
+icon = "mouse-left-click"
+
+  [[widget.setting]]
+  key = "socket"
+  type = "string"
+  label_key = "settings.socket.label"
+  description_key = "settings.socket.description"
+  default = "/tmp/tweakpoint.sock"
